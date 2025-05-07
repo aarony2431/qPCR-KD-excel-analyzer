@@ -11,27 +11,53 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       tags$p(
-        'This tool is intended to standardize the way that qPCR analysis is performed at Avidity. 
-        Additionally, this tool aims to simplify the qPCR workflow and address the biggest 
-        pain point--Benchling entries. While you will still need to interact with Benchling, 
-        here we have provided a means to consistently and easily register you entities in a single 
+        'This tool is intended to standardize the way that qPCR analysis is performed at Avidity.
+        Additionally, this tool aims to simplify the qPCR workflow and address the biggest
+        pain point--Benchling entries. While you will still need to interact with Benchling,
+        here we have provided a means to consistently and easily register you entities in a single
         copy-paste.'
       ),
       hr(),
       tags$strong('Instructions:'),
-      tags$p(tags$strong('1. '), 'Use the provided platemap/study design/probe template to create ', 
-             tags$strong('ALL '), 'of your platemaps.', 
-             downloadLink(outputId = 'download_template', label = 'Download platemap template here')),
-      tags$p(tags$strong('2. '), 'Use the ', 
-             tags$strong('# of plates '), 'field to indicate your number of plates to analyze.'),
-      tags$p(tags$strong('3. '), 'Upload the ', tags$i('.csv '), 'of the ', tags$strong('cDNA entitities '), 
-             'that you downloaded from the lookup table from Benchling.'),
-      tags$p(tags$strong('4. '), 'Upload the platemap and raw exported data ', 
-             tags$strong('for each plate '), 'to the designated upload spot.'),
-      tags$p(tags$strong('5. '), 'Perform a ready check by clicking the ', 
-             tags$strong('Ready Check '), 'button.'),
-      tags$p(tags$strong('6. '), 'If the ready check is successful, analyze and download your data by clicking the ', 
-             tags$strong('Analyze and Download '), 'button.')
+      tags$p(
+        tags$strong('1. '),
+        'Use the provided platemap/study design/probe template to create ',
+        tags$strong('ALL '),
+        'of your platemaps.',
+        downloadLink(outputId = 'download_template', label = 'Download platemap template here')
+      ),
+      tags$p(
+        tags$strong('2. '),
+        'Use the ',
+        tags$strong('# of plates '),
+        'field to indicate your number of plates to analyze.'
+      ),
+      tags$p(
+        tags$strong('3. '),
+        'Upload the ',
+        tags$i('.csv '),
+        'of the ',
+        tags$strong('cDNA entitities '),
+        'that you downloaded from the lookup table from Benchling.'
+      ),
+      tags$p(
+        tags$strong('4. '),
+        'Upload the platemap and raw exported data ',
+        tags$strong('for each plate '),
+        'to the designated upload spot.'
+      ),
+      tags$p(
+        tags$strong('5. '),
+        'Perform a ready check by clicking the ',
+        tags$strong('Ready Check '),
+        'button.'
+      ),
+      tags$p(
+        tags$strong('6. '),
+        'If the ready check is successful, analyze and download your data by clicking the ',
+        tags$strong('Analyze and Download '),
+        'button.'
+      )
     ),
     
     
@@ -82,7 +108,7 @@ server <- function(input, output) {
   })
   
   output$page_title <- renderUI({
-    fluidRow(
+    tagList(fluidRow(
       column(
         12,
         tags$strong('File Uploads'),
@@ -96,13 +122,69 @@ server <- function(input, output) {
           label = NULL,
           icon = icon("cog", lib = "glyphicon")
         ),
-        rv$current_page_advance_button(),
-        tags$p(tags$span(
-          style = ifelse(rv$ready_check, 'color:green', 'color:red'),
-          rv$ready_check_msg
-        ))
+        rv$current_page_advance_button()
       )
+    ), 
+    fluidRow(column(
+      12,
+      tags$p(tags$span(
+        style = ifelse(rv$ready_check, 'color:green', 'color:red'),
+        rv$ready_check_msg
+      ))
+    )),
+    fluidRow(column(
+      12,
+      actionButton(
+        inputId = 'examples',
+        label = 'Click to view upload examples',
+        class = 'btn-warning'
+      )
+    )))
+  })
+  
+  examplesModal <- function() {
+    modalDialog(
+      titlePanel('Examples of types of file uploads'),
+      tabsetPanel(
+        tabPanel(
+          title = 'Benchling cDNAs',
+          hr(),
+          tags$iframe(src = 'example_benchling_cdna.png', width = '100%', height = '500px', seamless = TRUE)
+        ),
+        tabPanel(
+          title = 'Platemaps',
+          hr(),
+          tags$iframe(src = 'D28 platemaps.pdf', width = '100%', height = '500px', seamless = TRUE)
+        ),
+        tabPanel(
+          title = 'Study Design',
+          hr(),
+          tags$iframe(src = 'example_studydesign.png', width = '100%', height = '500px', seamless = TRUE)
+        ),
+        tabPanel(
+          title = 'Benchling Probes',
+          hr(),
+          tags$iframe(src = 'example_probes.png', width = '100%', height = '500px', seamless = TRUE)
+        ),
+        tabPanel(
+          title = 'Raw Data (QS6 format)',
+          hr(),
+          tags$iframe(src = 'example_rawdata_qs6.png', width = '100%', height = '500px', seamless = TRUE)
+        ),
+        tabPanel(
+          title = 'Raw Data (QS7 format)',
+          hr(),
+          tags$iframe(src = 'example_rawdata_qs7.png', width = '100%', height = '500px', seamless = TRUE)
+        )
+      ),
+      footer = modalButton(label = 'OK',),
+      easyClose = TRUE,
+      size = 'xl'
     )
+  }
+  
+  observeEvent(input$examples, {
+    showModal(examplesModal())
   })
   
   settingsModal <- reactive(function() {

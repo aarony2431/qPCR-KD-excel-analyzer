@@ -7,9 +7,9 @@ library(purrr)
 library(openxlsx)
 
 # Global Variables
-plate_height <- 16
-plate_width <- 24
-plate_headers <- c(
+.plate_height <- 16
+.plate_width <- 24
+.plate_headers <- c(
   'Organ',
   'Group',
   'Control Group',
@@ -20,17 +20,9 @@ plate_headers <- c(
   'FAM Probe',
   'VIC Probe'
 )
-plate_offsets <- c(0, 1, 2, 2, 1, 2, 1, 1, 1)
-benchling.column_titles <- c(
-  'Entity',
-  'Animal.Sample',
-  'Animal.Group',
-  'Parent.Animal',
-  'Tissue.or.Fluid.Type',
-  'Plate.Number'
-)
-output.plates <- c('CT_VIC', 'CT_FAM', 'dCT', 'ddCT', '% mRNA expression')
-output.benchling <- c(
+.plate_offsets <- c(0, 1, 2, 2, 1, 2, 1, 1, 1)
+.output.plates <- c('CT_VIC', 'CT_FAM', 'dCT', 'ddCT', '% mRNA expression')
+.output.benchling <- c(
   'Entity',
   'FAM assay',
   'VIC assay',
@@ -104,20 +96,10 @@ process_raw_data <- function(df_in) {
 # Extract the data from the list from the platemaps file based on consistent expectations
 # Merge all data to a single data table
 extract_platemaps_and_study_info <- function(data_in,
-                                             plate_height = 16,
-                                             plate_width = 24,
-                                             plate_headers = c(
-                                               'Organ',
-                                               'Group',
-                                               'Control Group',
-                                               'Normalize to Group',
-                                               'Animal',
-                                               'Tissue Plate Number',
-                                               'Replicate',
-                                               'FAM Probe',
-                                               'VIC Probe'
-                                             ),
-                                             plate_offsets = c(0, 1, 2, 2, 1, 2, 1, 1, 1)) {
+                                             plate_height = .plate_height,
+                                             plate_width = .plate_width,
+                                             plate_headers = .plate_headers,
+                                             plate_offsets = .plate_offsets) {
   # Metadata needed for uniqueness:
   # Group
   # Animal
@@ -177,15 +159,7 @@ extract_platemaps_and_study_info <- function(data_in,
 
 # Extract Benchling information from data.frame from file
 # Create local IDs to match with the local IDs from the platemaps
-extract_and_convert_benchling_info <- function(df_in,
-                                               benchling.column_titles = c(
-                                                 'Entity',
-                                                 'Animal.Sample',
-                                                 'Animal.Group',
-                                                 'Parent.Animal',
-                                                 'Tissue.or.Fluid.Type',
-                                                 'Plate.Number'
-                                               )) {
+extract_and_convert_benchling_info <- function(df_in) {
   df_out <- tibble(Local_Unique_ID = apply(df_in, 1, function(r)
     paste(r['Parent.Animal'], r['Tissue.or.Fluid.Type'], r['Plate.Number'], sep = '-')),
     Entity = df_in$Entity)
@@ -290,8 +264,7 @@ analyze_data <- function(df_in,
 }
 
 # Create visualizations for easy viewing of data
-create_data_pivots <- function(df_in,
-                               output.plates = c('CT_VIC', 'CT_FAM', 'dCT', 'ddCT', '% mRNA expression')) {
+create_data_pivots <- function(df_in, output.plates = .output.plates) {
   output.pivot.plates <- df_in[which(names(df_in) %in% c('Well Position', output.plates))]
   output.pivot.plates$Row <- str_sub_all(output.pivot.plates$`Well Position`,
                                          start = 1,
@@ -313,18 +286,7 @@ create_data_pivots <- function(df_in,
 }
 
 # Benchling output
-benchling_output <- function(df_in,
-                             output.benchling = c(
-                               'Entity',
-                               'FAM assay',
-                               'VIC assay',
-                               'CT_FAM',
-                               'Ct Threshold_FAM',
-                               'CT_VIC',
-                               'Ct Threshold_VIC',
-                               '% mRNA expression',
-                               'Replicate'
-                             )) {
+benchling_output <- function(df_in, output.benchling = .output.benchling) {
   output.pivot.benchling <- df_in[-which(is.na(df_in$Entity)), which(names(df_in) %in% output.benchling)] %>% .[, output.benchling]
   output.benchling.pivot_columns <- c('CT_FAM',
                                       'Ct Threshold_FAM',
@@ -361,8 +323,8 @@ create_qPCR_Excel <- function(df_all,
                               df_plates,
                               df_benchling,
                               file = NULL,
-                              plate_height = 16,
-                              plate_width = 24,
+                              plate_height = .plate_height,
+                              plate_width = .plate_width,
                               output.plates.offset = 2) {
   wb <- createWorkbook()
   
@@ -394,8 +356,8 @@ create_qPCR_Excel <- function(df_all,
   
   if (is.null(file)) {
     file <- paste(format(Sys.time(), '%F %H-%M-%S'),
-                      'qPCR_analysis.xlsx',
-                      sep = '_')
+                  'qPCR_analysis.xlsx',
+                  sep = '_')
   }
   saveWorkbook(wb, file = file, overwrite = TRUE)
 }
@@ -405,18 +367,18 @@ create_qPCR_Excel <- function(df_all,
 # datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
 # datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
 # datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
-# 
+#
 # input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
 # input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
 # input.Benchling <- read.csv(datafile.path.Benchling)
-# 
+#
 # # Get data from dfs
 # df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
 # df_rawdata <- process_raw_data(input.rawdata)
 # df_info <- extract_platemaps_and_study_info(input.platemap)
 # df_plate_metadata <- df_info[['plate_metadata']]
 # df_benchling_probes <- df_info[['probes']]
-# 
+#
 # # Do stuff here
 # df_out_all <- merge_data(
 #   df_plate_metadata = df_plate_metadata,
@@ -426,7 +388,7 @@ create_qPCR_Excel <- function(df_all,
 # ) %>% analyze_data()
 # df_out_plates <- create_data_pivots(df_out_all)
 # df_out_benchling <- benchling_output(df_out_all)
-# 
+#
 # # Excel
 # folderpath <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R)" %>% tools::file_path_as_absolute()
 # create_qPCR_Excel(df_out_all, df_out_plates, df_out_benchling, folderpath)
