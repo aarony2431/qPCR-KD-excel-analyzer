@@ -5,7 +5,7 @@ account: aaronyu
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 14701588
-bundleId: 10247247
+bundleId: 10248163
 url: https://aaronyu.shinyapps.io/qPCR-KD-excel-analyzer/
 version: 1
 asMultiple: FALSE

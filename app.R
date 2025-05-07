@@ -154,6 +154,9 @@ server <- function(input, output) {
         tabPanel(
           title = 'Platemaps',
           hr(),
+          tags$p('The names here that you used for your probes ', tags$strong('MUST '), 
+                      'be the same as the shorthand ones listed in your Benchling probes.'),
+          br(),
           tags$iframe(src = 'D28 platemaps.pdf', width = '100%', height = '500px', seamless = TRUE)
         ),
         tabPanel(
@@ -164,6 +167,9 @@ server <- function(input, output) {
         tabPanel(
           title = 'Benchling Probes',
           hr(),
+          tags$p('The shorthand names here that you used for your probes ', tags$strong('MUST '), 
+                 'be the same as those listed in your platemaps.'),
+          br(),
           tags$iframe(src = 'example_probes.png', width = '100%', height = '500px', seamless = TRUE)
         ),
         tabPanel(
