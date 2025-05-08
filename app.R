@@ -15,7 +15,7 @@ ui <- fluidPage(
         Additionally, this tool aims to simplify the qPCR workflow and address the biggest
         pain point--Benchling entries. While you will still need to interact with Benchling,
         here we have provided a means to consistently and easily register you entities in a single
-        copy-paste.'
+        copy-paste. Thankfully though, you can use this tool ', tags$i('without '), 'Benchling.'
       ),
       hr(),
       tags$strong('Instructions:'),
@@ -33,12 +33,13 @@ ui <- fluidPage(
         'field to indicate your number of plates to analyze.'
       ),
       tags$p(
-        tags$strong('3. '),
+        tags$strong('3. (Optional) '),
         'Upload the ',
         tags$i('.csv '),
         'of the ',
         tags$strong('cDNA entitities '),
-        'that you downloaded from the lookup table from Benchling.'
+        'that you downloaded from the lookup table from Benchling. 
+        If you do not have cDNA entitites, skip this step and proceed to the next step.'
       ),
       tags$p(
         tags$strong('4. '),
@@ -156,6 +157,9 @@ server <- function(input, output) {
           hr(),
           tags$p('The names here that you used for your probes ', tags$strong('MUST '), 
                       'be the same as the shorthand ones listed in your Benchling probes.'),
+          br(),
+          tags$p('The Organs that you entered ', tags$strong('MUST '), 
+                 'be the same as the ones listed for you Benchling cDNAs.'),
           br(),
           tags$iframe(src = 'D28 platemaps.pdf', width = '100%', height = '500px', seamless = TRUE)
         ),
@@ -311,8 +315,10 @@ server <- function(input, output) {
       rv$ready_check_msg <- 'Ready check successful! Please click "Analyze and Download"'
       
       if (is.null(input$benchling)) {
-        rv$ready_check <- FALSE
-        rv$ready_check_msg <- 'Please upload a valid Benchling cDNA registry file.'
+        # rv$ready_check <- FALSE
+        # rv$ready_check_msg <- 'Please upload a valid Benchling cDNA registry file.'
+        rv$data.input.benchling <- NULL
+        rv$ready_check_msg <- 'No Benchling entitites detected. Analysis will be performed but a Benchling table will not be output.'
       } else {
         if (tolower(tools::file_ext(input$benchling$datapath)) %in% c('xlsx', 'xls')) {
           rv$data.input.benchling <- read_excel(input$benchling$datapath)
@@ -326,7 +332,7 @@ server <- function(input, output) {
         platemap_file <- input[[paste0('platemap', x)]]
         rawdata_file <- input[[paste0('rawdata', x)]]
         if (is.null(platemap_file) | is.null(rawdata_file)) {
-          rv$read_check <- FALSE
+          rv$ready_check <- FALSE
           rv$ready_check_msg <- 'Please ensure all entered plates have both a platemap and a raw data file.'
           rv$data.input.platemaps[[x]] <- list()
           rv$data.input.rawdatas[[x]] <- list()
@@ -419,7 +425,10 @@ server <- function(input, output) {
     filename = paste(format(Sys.time(), '%F %H-%M-%S'), 'qPCR_analysis.xlsx', sep = '_'),
     content = function(file) {
       withProgress(message = 'Analyzing...', value = 0, {
-        df_benchling_samples <- extract_and_convert_benchling_info(rv$data.input.benchling)
+        df_benchling_samples <- NULL
+        if (!is.null(rv$data.input.benchling)) {
+          df_benchling_samples <- extract_and_convert_benchling_info(rv$data.input.benchling)
+        }
         df_rawdata <- process_raw_data(rv$data.input.rawdatas[[1]])
         df_info <- extract_platemaps_and_study_info(rv$data.input.platemaps[[1]])
         df_plate_metadata <- df_info[['plate_metadata']]
@@ -429,14 +438,19 @@ server <- function(input, output) {
         # Do stuff here
         df_out_all <- merge_data(
           df_plate_metadata = df_plate_metadata,
-          df_benchling_samples = df_benchling_samples,
           df_benchling_probes = df_benchling_probes,
+          df_benchling_samples = df_benchling_samples,
           df_rawdata = df_rawdata
         ) %>% analyze_data(maxCT = rv$maxCT, minCT = rv$minCT)
         incProgress(0.2, message = 'Analyzing (1/1)...')
         df_out_plates <- create_data_pivots(df_out_all)
         incProgress(0.2, message = 'Analyzing (1/1)...')
-        df_out_benchling <- benchling_output(df_out_all)
+        df_out_benchling <- NULL
+        if (is.null(df_benchling_samples)) {
+          df_out_benchling <- benchling_output(df_in = NULL)
+        } else {
+          df_out_benchling <- benchling_output(df_in = df_out_all)
+        }
         incProgress(0.2, message = 'Analyzing (1/1)...')
         
         # Actual download portion
@@ -468,7 +482,10 @@ server <- function(input, output) {
         on.exit(setwd(owd))
         
         #loop through the sheets
-        df_benchling_samples <- extract_and_convert_benchling_info(rv$data.input.benchling)
+        df_benchling_samples <- NULL
+        if (!is.null(rv$data.input.benchling)) {
+          df_benchling_samples <- extract_and_convert_benchling_info(rv$data.input.benchling)
+        }
         incProgress(1 / iters)
         files <- map_vec(1:rv$num_plates, function(n) {
           df_rawdata <- process_raw_data(rv$data.input.rawdatas[[n]])
@@ -490,7 +507,12 @@ server <- function(input, output) {
           df_out_plates <- create_data_pivots(df_out_all)
           incProgress(1 / iters,
                       message = paste0('Analyzing (', n, '/', rv$num_plates, ')...'))
-          df_out_benchling <- benchling_output(df_out_all)
+          df_out_benchling <- NULL
+          if (is.null(df_benchling_samples)) {
+            df_out_benchling <- benchling_output(df_in = NULL)
+          } else {
+            df_out_benchling <- benchling_output(df_in = df_out_all)
+          }
           incProgress(1 / iters,
                       message = paste0('Analyzing (', n, '/', rv$num_plates, ')...'))
           

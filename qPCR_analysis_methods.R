@@ -171,13 +171,18 @@ extract_and_convert_benchling_info <- function(df_in) {
 
 # Merge Benchling dictionary with raw data and platemaps
 merge_data <- function(df_plate_metadata,
-                       df_benchling_samples,
                        df_benchling_probes,
+                       df_benchling_samples = NULL,
                        df_rawdata) {
   # Merge data with benchling ---------------------------------------------------
-  df_out <- reduce(list(df_plate_metadata, df_benchling_samples),
-                   left_join,
-                   by = 'Local_Unique_ID')
+  df_out <- NULL
+  if (is.null(df_benchling_samples)) {
+    df_out <- df_plate_metadata
+  } else {
+    df_out <- reduce(list(df_plate_metadata, df_benchling_samples),
+                     left_join,
+                     by = 'Local_Unique_ID')
+  }
   df_out <- reduce(list(df_out, df_rawdata), full_join, by = 'Well Position')
   df_out$`FAM assay` <- apply(df_out, 1, function(r) {
     probe_name <- as.character(r['FAM Probe'])
@@ -286,36 +291,43 @@ create_data_pivots <- function(df_in, output.plates = .output.plates) {
 }
 
 # Benchling output
-benchling_output <- function(df_in, output.benchling = .output.benchling) {
-  output.pivot.benchling <- df_in[-which(is.na(df_in$Entity)), which(names(df_in) %in% output.benchling)] %>% .[, output.benchling]
-  output.benchling.pivot_columns <- c('CT_FAM',
-                                      'Ct Threshold_FAM',
-                                      'CT_VIC',
-                                      'Ct Threshold_VIC',
-                                      '% mRNA expression')
-  output.pivot.benchling <- pivot_wider(
-    output.pivot.benchling,
-    names_from = 'Replicate',
-    values_from = all_of(output.benchling.pivot_columns)
-  )
-  df_out <- apply(output.pivot.benchling, 1, function(r) {
-    out.data <- sapply(output.benchling.pivot_columns, function(col) {
-      cols <- paste(rep(col, each = 2), 1:2, sep = '_')
-      avg <- data.frame(mean(as.numeric(r[cols])),
-                        check.names = FALSE,
-                        fix.empty.names = FALSE)
-      return(avg)
-    }) %>% as_tibble()
-    out <- bind_cols(
-      Entity = r['Entity'],
-      'FAM assay' = r['FAM assay'],
-      'VIC assay' = r['VIC assay'],
-      out.data
+benchling_output <- function(df_in = NULL,
+                             output.benchling = .output.benchling) {
+  if (is.null(df_in)) {
+    df_out <- data.frame(Error = 'No Benchling entities supplied. Analysis performed without Benchling entitites.')
+    
+    return(df_out)
+  } else {
+    output.pivot.benchling <- df_in[-which(is.na(df_in$Entity)), which(names(df_in) %in% output.benchling)] %>% .[, output.benchling]
+    output.benchling.pivot_columns <- c('CT_FAM',
+                                        'Ct Threshold_FAM',
+                                        'CT_VIC',
+                                        'Ct Threshold_VIC',
+                                        '% mRNA expression')
+    output.pivot.benchling <- pivot_wider(
+      output.pivot.benchling,
+      names_from = 'Replicate',
+      values_from = all_of(output.benchling.pivot_columns)
     )
-    return(out)
-  }) %>% reduce(bind_rows)
-  
-  return(df_out)
+    df_out <- apply(output.pivot.benchling, 1, function(r) {
+      out.data <- sapply(output.benchling.pivot_columns, function(col) {
+        cols <- paste(rep(col, each = 2), 1:2, sep = '_')
+        avg <- data.frame(mean(as.numeric(r[cols])),
+                          check.names = FALSE,
+                          fix.empty.names = FALSE)
+        return(avg)
+      }) %>% as_tibble()
+      out <- bind_cols(
+        Entity = r['Entity'],
+        'FAM assay' = r['FAM assay'],
+        'VIC assay' = r['VIC assay'],
+        out.data
+      )
+      return(out)
+    }) %>% reduce(bind_rows)
+    
+    return(df_out)
+  }
 }
 
 # Create Excel file with final data set
