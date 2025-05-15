@@ -21,7 +21,11 @@ library(openxlsx)
   'VIC Probe'
 )
 .plate_offsets <- c(0, 1, 2, 2, 1, 2, 1, 1, 1)
-.output.plates <- c('CT_VIC', 'CT_FAM', 'dCT', 'ddCT', '% mRNA expression')
+.output.plates <- c('CT_VIC',
+                    'CT_FAM',
+                    'dCT',
+                    'ddCT',
+                    '% mRNA expression (technical replicate)')
 .output.benchling <- c(
   'Entity',
   'FAM assay',
@@ -30,7 +34,7 @@ library(openxlsx)
   'Ct Threshold_FAM',
   'CT_VIC',
   'Ct Threshold_VIC',
-  '% mRNA expression',
+  '% mRNA expression (geomean)',
   'Replicate'
 )
 
@@ -257,9 +261,16 @@ analyze_data <- function(df_in,
       NA
     }
   })
-  df_out$`% mRNA expression` <- apply(df_out, 1, function(r) {
+  df_out$`% mRNA expression (technical replicate)` <- apply(df_out, 1, function(r) {
     if (!as.logical(r['CT_flag'])) {
       100 * 2^(-1 * as.numeric(r['ddCT']))
+    } else {
+      NA
+    }
+  })
+  df_out$`% mRNA expression (geomean)` <- apply(df_out, 1, function(r) {
+    if (!as.logical(r['CT_flag'])) {
+      exp(mean(log(pull(df_out[which(df_out$Local_Unique_ID == r['Local_Unique_ID']), '% mRNA expression (technical replicate)']))))
     } else {
       NA
     }
@@ -298,17 +309,24 @@ benchling_output <- function(df_in = NULL,
     
     return(df_out)
   } else {
+    output.benchling <- c(output.benchling, 'Normalize to Group')
     output.pivot.benchling <- df_in[-which(is.na(df_in$Entity)), which(names(df_in) %in% output.benchling)] %>% .[, output.benchling]
-    output.benchling.pivot_columns <- c('CT_FAM',
-                                        'Ct Threshold_FAM',
-                                        'CT_VIC',
-                                        'Ct Threshold_VIC',
-                                        '% mRNA expression')
+    output.benchling.pivot_columns <- c(
+      'CT_FAM',
+      'Ct Threshold_FAM',
+      'CT_VIC',
+      'Ct Threshold_VIC',
+      '% mRNA expression (geomean)'
+    )
     output.pivot.benchling <- pivot_wider(
       output.pivot.benchling,
       names_from = 'Replicate',
       values_from = all_of(output.benchling.pivot_columns)
     )
+    normalization_entities <- unique(df_in[-which(is.na(df_in$`Normalize to Group`)), 'Normalize to Group']) %>% pull() %>% lapply(function(group) {
+      control_entities <- df_in[-which(is.na(df_in$Entity)), ] %>% .[-which(is.na(.$`Control Group`)), ] %>% .[which(.$`Normalize to Group` == group), 'Entity']
+      group = pull(control_entities)
+    })
     df_out <- apply(output.pivot.benchling, 1, function(r) {
       out.data <- sapply(output.benchling.pivot_columns, function(col) {
         cols <- paste(rep(col, each = 2), 1:2, sep = '_')
@@ -321,7 +339,8 @@ benchling_output <- function(df_in = NULL,
         Entity = r['Entity'],
         'FAM assay' = r['FAM assay'],
         'VIC assay' = r['VIC assay'],
-        out.data
+        out.data, 
+        'ddCT Control Samples' = paste(normalization_entities[[as.numeric(r['Normalize to Group'])]], collapse = ',')
       )
       return(out)
     }) %>% reduce(bind_rows)
@@ -375,31 +394,31 @@ create_qPCR_Excel <- function(df_all,
 }
 
 
-# # Testing
-# datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
-# datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
-# datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
-#
-# input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
-# input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
-# input.Benchling <- read.csv(datafile.path.Benchling)
-#
-# # Get data from dfs
-# df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
-# df_rawdata <- process_raw_data(input.rawdata)
-# df_info <- extract_platemaps_and_study_info(input.platemap)
-# df_plate_metadata <- df_info[['plate_metadata']]
-# df_benchling_probes <- df_info[['probes']]
-#
-# # Do stuff here
-# df_out_all <- merge_data(
-#   df_plate_metadata = df_plate_metadata,
-#   df_benchling_samples = df_benchling_samples,
-#   df_benchling_probes = df_benchling_probes,
-#   df_rawdata = df_rawdata
-# ) %>% analyze_data()
-# df_out_plates <- create_data_pivots(df_out_all)
-# df_out_benchling <- benchling_output(df_out_all)
+# Testing
+datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
+datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
+datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
+
+input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
+input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
+input.Benchling <- read.csv(datafile.path.Benchling)
+
+# Get data from dfs
+df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
+df_rawdata <- process_raw_data(input.rawdata)
+df_info <- extract_platemaps_and_study_info(input.platemap)
+df_plate_metadata <- df_info[['plate_metadata']]
+df_benchling_probes <- df_info[['probes']]
+
+# Do stuff here
+df_out_all <- merge_data(
+  df_plate_metadata = df_plate_metadata,
+  df_benchling_samples = df_benchling_samples,
+  df_benchling_probes = df_benchling_probes,
+  df_rawdata = df_rawdata
+) %>% analyze_data()
+df_out_plates <- create_data_pivots(df_out_all)
+df_out_benchling <- benchling_output(df_out_all)
 #
 # # Excel
 # folderpath <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R)" %>% tools::file_path_as_absolute()
