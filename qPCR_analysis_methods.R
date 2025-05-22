@@ -51,9 +51,9 @@ process_raw_data <- function(df_in) {
   # 'CT', 'Ct Threshold', 'Target Name', 'Reporter'
   # QS7 starts at row 22 in "Results"
   # 'Cq', 'Threshold', 'Target', 'Reporter'
-  rawdata.column_titles_line <- list('QS6' = 46, 'QS7' = 21)
+  rawdata.column_titles_line <- which(df_in$Results[,1]=='Well')
   rawdata.column_titles <- list(
-    'QS6' = c(
+    'QuantStudio(TM) 6 Flex System' = c(
       well = 'Well',
       wellpos = 'Well Position',
       ct = 'CT',
@@ -61,7 +61,7 @@ process_raw_data <- function(df_in) {
       target = 'Target Name',
       reporter = 'Reporter'
     ),
-    'QS7' = c(
+    'QuantStudio™ 7 Pro System' = c(
       well = 'Well',
       wellpos = 'Well Position',
       ct = 'Cq',
@@ -72,21 +72,19 @@ process_raw_data <- function(df_in) {
   )
   
   # Identify QS system from raw data "Results"
-  QS.column_titles_line <- apply(df_in$Results, 1, function(r)
-    max(
-      sum(r %in% rawdata.column_titles$QS6),
-      sum(r %in% rawdata.column_titles$QS7)
-    )) %>% which.max()
-  QS.system_name <- which(rawdata.column_titles_line == QS.column_titles_line) %>% names()
+  QS.system_name <- df_in$Results[,2][which(str_detect(t(df_in$Results[,2]), 'QuantStudio')),] %>% as.character()
   QS.column_titles <- rawdata.column_titles[[QS.system_name]]
   
   # Create cleaned raw data "Results" so it has proper headers and only useful data
   # Collapse to only important columns and split reporters
   # Consistent formatting of column names to QS6
-  data.rawdata <- df_in$Results[-c(1:rawdata.column_titles_line[[QS.system_name]]), ]
-  names(data.rawdata) <- df_in$Results[rawdata.column_titles_line[['QS6']], ]
-  QS.system_name <- 'QS6'
+  data.rawdata <- df_in$Results[-c(1:rawdata.column_titles_line), ]
+  names(data.rawdata) <- df_in$Results[rawdata.column_titles_line, ]
+  data.rawdata <- data.rawdata[, QS.column_titles]
+  QS.system_name <- 'QuantStudio(TM) 6 Flex System'
   QS.column_titles <- rawdata.column_titles[[QS.system_name]]
+  names(data.rawdata) <- QS.column_titles
+  data.rawdata <- data.rawdata[-which(is.na(data.rawdata$Reporter)), ]
   data.rawdata <- pivot_wider(
     data.rawdata,
     id_cols = c(QS.column_titles[['well']], QS.column_titles[['wellpos']]),
@@ -394,23 +392,27 @@ create_qPCR_Excel <- function(df_all,
 }
 
 
-# # Testing
+# Testing
 # datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
 # datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
+# datafile.path.rawdata <-r"(P:\Departments\Bioanalytical\1. Mouse Study Data\2024\2024-182 (049) -Platform lipid length optimization of PS3 vs PS6 lipid-modified SSB AOCs\raw data\2024.05.29 AY 049 D84 TC H_20240529_152125_20240529 160507.xls)"
 # datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
+# 
+# datafile.path.platemap <- r"(C:\Users\ayu\Downloads\platemaps_template_blank.xlsx)"
+# datafile.path.rawdata <- r"(C:\Users\ayu\Downloads\2025-05-21 Study 2025-955 Dmpk_P2_REF.xlsx)"
 # 
 # input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
 # input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
 # input.Benchling <- read.csv(datafile.path.Benchling)
-# 
-# # Get data from dfs
+
+# Get data from dfs
 # df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
 # df_rawdata <- process_raw_data(input.rawdata)
 # df_info <- extract_platemaps_and_study_info(input.platemap)
 # df_plate_metadata <- df_info[['plate_metadata']]
 # df_benchling_probes <- df_info[['probes']]
-# 
-# # Do stuff here
+
+# Do stuff here
 # df_out_all <- merge_data(
 #   df_plate_metadata = df_plate_metadata,
 #   df_benchling_samples = df_benchling_samples,
@@ -419,7 +421,7 @@ create_qPCR_Excel <- function(df_all,
 # ) %>% analyze_data()
 # df_out_plates <- create_data_pivots(df_out_all)
 # df_out_benchling <- benchling_output(df_out_all)
-# 
+
 # # Excel
 # folderpath <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R)" %>% tools::file_path_as_absolute()
 # create_qPCR_Excel(df_out_all, df_out_plates, df_out_benchling, folderpath)
