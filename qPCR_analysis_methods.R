@@ -332,8 +332,12 @@ analyze_data <- function(df_in,
   
   mRNA_geomeans <- apply(df_out, 1, function(r) {
     if (!as.logical(r['CT_flag'])) {
-      geomean1 <- exp(mean(log(pull(df_out[which(df_out$Local_Unique_ID == r['Local_Unique_ID']), '% mRNA expression Target1 (technical replicate)']))))
-      geomean2 <- exp(mean(log(pull(df_out[which(df_out$Local_Unique_ID == r['Local_Unique_ID']), '% mRNA expression Target2 (technical replicate)']))))
+      target1 <- as.character(r['Target1'])
+      target2 <- as.character(r['Target2'])
+      data1 <- df_out %>% filter(`Local_Unique_ID` == as.character(r['Local_Unique_ID']), `Target1` == target1) %>% .[, '% mRNA expression Target1 (technical replicate)']
+      data2 <- df_out %>% filter(`Local_Unique_ID` == as.character(r['Local_Unique_ID']), `Target2` == target2) %>% .[, '% mRNA expression Target2 (technical replicate)']
+      geomean1 <- exp(mean(log(pull(data1))))
+      geomean2 <- exp(mean(log(pull(data2))))
       return(c(geomean1, geomean2))
     } else {
       return(c(NA, NA))
@@ -484,32 +488,32 @@ create_qPCR_Excel <- function(df_all,
 
 
 # Testing
-datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
-datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
-datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
-
+# datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
+# datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
+# datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
+# 
 # datafile.path.platemap <- r"(C:\Users\ayu\Downloads\platemaps_template_blank.xlsx)"
-# datafile.path.rawdata <- r"(C:\Users\ayu\Downloads\2025-05-21 Study 2025-955 Dmpk_P2_REF.xlsx)"
-
-input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
-input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
-input.Benchling <- read.csv(datafile.path.Benchling)
+# datafile.path.rawdata <- r"(C:\Users\ayu\Downloads\2025-05-21 Study 2025-955 Dmpk_P2.xlsx)"
+# 
+# input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
+# input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
+# input.Benchling <- read.csv(datafile.path.Benchling)
 
 # Get data from dfs
-df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
-df_rawdata <- process_raw_data(input.rawdata)
-df_info <- extract_platemaps_and_study_info(input.platemap)
-df_plate_metadata <- df_info[['plate_metadata']]
-df_benchling_probes <- df_info[['probes']]
+# df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
+# df_rawdata <- process_raw_data(input.rawdata)
+# df_info <- extract_platemaps_and_study_info(input.platemap)
+# df_plate_metadata <- df_info[['plate_metadata']]
+# df_benchling_probes <- df_info[['probes']]
 
 # Do stuff here
-df_out_all <- merge_data(
-  df_plate_metadata = df_plate_metadata,
-  df_benchling_samples = df_benchling_samples,
-  df_rawdata = df_rawdata
-) %>% analyze_data()
-df_out_plates <- create_data_pivots(df_out_all)
-df_out_benchling <- benchling_output(df_out_all, df_benchling_probes = df_benchling_probes)
+# df_out_all <- merge_data(
+#   df_plate_metadata = df_plate_metadata,
+#   df_benchling_samples = df_benchling_samples,
+#   df_rawdata = df_rawdata
+# ) %>% analyze_data(normalization_channel = 'CT_ABY')
+# df_out_plates <- create_data_pivots(df_out_all)
+# df_out_benchling <- benchling_output(df_out_all, df_benchling_probes = df_benchling_probes)
 
 # # Excel
 # folderpath <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R)" %>% tools::file_path_as_absolute()
