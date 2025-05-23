@@ -15,7 +15,9 @@ ui <- fluidPage(
         Additionally, this tool aims to simplify the qPCR workflow and address the biggest
         pain point--Benchling entries. While you will still need to interact with Benchling,
         here we have provided a means to consistently and easily register you entities in a single
-        copy-paste. Thankfully though, you can use this tool ', tags$i('without '), 'Benchling.'
+        copy-paste. Thankfully though, you can use this tool ',
+        tags$i('without '),
+        'Benchling.'
       ),
       hr(),
       tags$strong('Instructions:'),
@@ -38,7 +40,7 @@ ui <- fluidPage(
         tags$i('.csv '),
         'of the ',
         tags$strong('cDNA entitities '),
-        'that you downloaded from the lookup table from Benchling. 
+        'that you downloaded from the lookup table from Benchling.
         If you do not have cDNA entitites, skip this step and proceed to the next step.'
       ),
       tags$p(
@@ -87,7 +89,8 @@ server <- function(input, output) {
     data.input.benchling = NULL,
     filepaths.benchling = NULL,
     filepaths.plates = list(),
-    filepaths.rawdatas = list()
+    filepaths.rawdatas = list(),
+    normalization_channels = list()
   )
   
   rv$current_page_advance_button <- reactive({
@@ -125,15 +128,12 @@ server <- function(input, output) {
         ),
         rv$current_page_advance_button()
       )
-    ), 
-    fluidRow(column(
-      12,
-      tags$p(tags$span(
+    ), fluidRow(column(12, tags$p(
+      tags$span(
         style = ifelse(rv$ready_check, 'color:green', 'color:red'),
         rv$ready_check_msg
-      ))
-    )),
-    fluidRow(column(
+      )
+    ))), fluidRow(column(
       12,
       actionButton(
         inputId = 'examples',
@@ -150,44 +150,83 @@ server <- function(input, output) {
         tabPanel(
           title = 'Benchling cDNAs',
           hr(),
-          tags$iframe(src = 'example_benchling_cdna.png', width = '100%', height = '500px', seamless = TRUE)
+          tags$iframe(
+            src = 'example_benchling_cdna.png',
+            width = '100%',
+            height = '500px',
+            seamless = TRUE
+          )
         ),
         tabPanel(
           title = 'Platemaps',
           hr(),
-          tags$p('The names here that you used for your probes ', tags$strong('MUST '), 
-                      'be the same as the shorthand ones listed in your Benchling probes.'),
+          tags$p(
+            'The names here that you used for your probes ',
+            tags$strong('MUST '),
+            'be the same as the shorthand ones listed in your Benchling probes.'
+          ),
           br(),
-          tags$p('The Organs that you entered ', tags$strong('MUST '), 
-                 'be the same as the ones listed for you Benchling cDNAs.'),
+          tags$p(
+            'The Organs that you entered ',
+            tags$strong('MUST '),
+            'be the same as the ones listed for you Benchling cDNAs.'
+          ),
           br(),
-          tags$iframe(src = 'D28 platemaps.pdf', width = '100%', height = '500px', seamless = TRUE)
+          tags$iframe(
+            src = 'D28 platemaps.pdf',
+            width = '100%',
+            height = '500px',
+            seamless = TRUE
+          )
         ),
         tabPanel(
           title = 'Study Design',
           hr(),
-          tags$iframe(src = 'example_studydesign.png', width = '100%', height = '500px', seamless = TRUE)
+          tags$iframe(
+            src = 'example_studydesign.png',
+            width = '100%',
+            height = '500px',
+            seamless = TRUE
+          )
         ),
         tabPanel(
           title = 'Benchling Probes',
           hr(),
-          tags$p('The shorthand names here that you used for your probes ', tags$strong('MUST '), 
-                 'be the same as those listed in your platemaps.'),
+          tags$p(
+            'The shorthand names here that you used for your probes ',
+            tags$strong('MUST '),
+            'be the same as those listed in your platemaps.'
+          ),
           br(),
-          tags$iframe(src = 'example_probes.png', width = '100%', height = '500px', seamless = TRUE)
+          tags$iframe(
+            src = 'example_probes.png',
+            width = '100%',
+            height = '500px',
+            seamless = TRUE
+          )
         ),
         tabPanel(
           title = 'Raw Data (QS6 format)',
           hr(),
-          tags$iframe(src = 'example_rawdata_qs6.png', width = '100%', height = '500px', seamless = TRUE)
+          tags$iframe(
+            src = 'example_rawdata_qs6.png',
+            width = '100%',
+            height = '500px',
+            seamless = TRUE
+          )
         ),
         tabPanel(
           title = 'Raw Data (QS7 format)',
           hr(),
-          tags$iframe(src = 'example_rawdata_qs7.png', width = '100%', height = '500px', seamless = TRUE)
+          tags$iframe(
+            src = 'example_rawdata_qs7.png',
+            width = '100%',
+            height = '500px',
+            seamless = TRUE
+          )
         )
       ),
-      footer = modalButton(label = 'OK',),
+      footer = modalButton(label = 'OK', ),
       easyClose = TRUE,
       size = 'xl'
     )
@@ -287,6 +326,7 @@ server <- function(input, output) {
     filepaths.benchling <- NULL
     filepaths.plates <- list()
     filepaths.rawdatas <- list()
+    normalization_channels <- list()
   })
   
   observe({
@@ -331,6 +371,7 @@ server <- function(input, output) {
       walk(1:rv$num_plates, function(x) {
         platemap_file <- input[[paste0('platemap', x)]]
         rawdata_file <- input[[paste0('rawdata', x)]]
+        rv$normalization_channels[[x]] <- input[[paste0('normalization_channel', x)]]
         if (is.null(platemap_file) | is.null(rawdata_file)) {
           rv$ready_check <- FALSE
           rv$ready_check_msg <- 'Please ensure all entered plates have both a platemap and a raw data file.'
@@ -379,7 +420,7 @@ server <- function(input, output) {
   pages_uploads <- reactive({
     map(1:rv$num_plates, function(n) {
       fluidRow(column(
-        6,
+        4,
         fileInput(
           inputId = paste0('platemap', n),
           label = paste0('Platemap #', n),
@@ -388,8 +429,21 @@ server <- function(input, output) {
           placeholder = 'None',
           width = '100%'
         )
-      ), column(
-        6,
+      ),
+      column(
+        4,
+        radioButtons(
+          inputId = paste0('normalization_channel', n),
+          label = 'HKG Fluorescence Channel',
+          choiceNames = c('FAM', 'VIC', 'ABY'),
+          choiceValues = c('CT_FAM', 'CT_VIC', 'CT_ABY'),
+          selected = 'CT_VIC',
+          inline = TRUE,
+          width = '100%'
+        )
+      ),
+      column(
+        4,
         fileInput(
           inputId = paste0('rawdata', n),
           label = paste0('Raw Data #', n),
@@ -438,10 +492,13 @@ server <- function(input, output) {
         # Do stuff here
         df_out_all <- merge_data(
           df_plate_metadata = df_plate_metadata,
-          df_benchling_probes = df_benchling_probes,
           df_benchling_samples = df_benchling_samples,
           df_rawdata = df_rawdata
-        ) %>% analyze_data(maxCT = rv$maxCT, minCT = rv$minCT)
+        ) %>% analyze_data(
+          normalization_channel = rv$normalization_channels[[1]],
+          maxCT = rv$maxCT,
+          minCT = rv$minCT
+        )
         incProgress(0.2, message = 'Analyzing (1/1)...')
         df_out_plates <- create_data_pivots(df_out_all)
         incProgress(0.2, message = 'Analyzing (1/1)...')
@@ -449,7 +506,7 @@ server <- function(input, output) {
         if (is.null(df_benchling_samples)) {
           df_out_benchling <- benchling_output(df_in = NULL)
         } else {
-          df_out_benchling <- benchling_output(df_in = df_out_all)
+          df_out_benchling <- benchling_output(df_in = df_out_all, df_benchling_probes = df_benchling_probes)
         }
         incProgress(0.2, message = 'Analyzing (1/1)...')
         
@@ -501,7 +558,7 @@ server <- function(input, output) {
             df_benchling_samples = df_benchling_samples,
             df_benchling_probes = df_benchling_probes,
             df_rawdata = df_rawdata
-          ) %>% analyze_data(maxCT = rv$maxCT, minCT = rv$minCT)
+          ) %>% analyze_data(normalization_channel = rv$normalization_channels[[n]], maxCT = rv$maxCT, minCT = rv$minCT)
           incProgress(1 / iters,
                       message = paste0('Analyzing (', n, '/', rv$num_plates, ')...'))
           df_out_plates <- create_data_pivots(df_out_all)
@@ -511,7 +568,7 @@ server <- function(input, output) {
           if (is.null(df_benchling_samples)) {
             df_out_benchling <- benchling_output(df_in = NULL)
           } else {
-            df_out_benchling <- benchling_output(df_in = df_out_all)
+            df_out_benchling <- benchling_output(df_in = df_out_all, df_benchling_probes = df_benchling_probes)
           }
           incProgress(1 / iters,
                       message = paste0('Analyzing (', n, '/', rv$num_plates, ')...'))
