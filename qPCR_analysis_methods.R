@@ -18,23 +18,34 @@ library(openxlsx)
   'Tissue Plate Number',
   'Replicate',
   'FAM Probe',
-  'VIC Probe'
+  'VIC Probe',
+  'ABY Probe'
 )
-.plate_offsets <- c(0, 1, 2, 2, 1, 2, 1, 1, 1)
-.output.plates <- c('CT_VIC',
-                    'CT_FAM',
-                    'dCT',
-                    'ddCT',
-                    '% mRNA expression (technical replicate)')
+.plate_offsets <- c(0, 1, 2, 2, 1, 2, 1, 1, 1, 1)
+.output.plates <- c(
+  'CT_FAM',
+  'CT_VIC',
+  'CT_ABY',
+  'dCT_Target1',
+  'ddCT_Target1',
+  '% mRNA expression Target1 (technical replicate)',
+  'dCT_Target2',
+  'ddCT_Target2',
+  '% mRNA expression Target2 (technical replicate)'
+)
 .output.benchling <- c(
   'Entity',
-  'FAM assay',
-  'VIC assay',
-  'CT_FAM',
-  'Ct Threshold_FAM',
-  'CT_VIC',
-  'Ct Threshold_VIC',
-  '% mRNA expression (geomean)',
+  'Target1',
+  'Target2',
+  'Reference',
+  'CT_Target1',
+  'Ct Threshold_Target1',
+  'CT_Target2',
+  'Ct Threshold_Target2',
+  'CT_Reference',
+  'Ct Threshold_Reference',
+  '% mRNA expression Target1 (geomean)',
+  '% mRNA expression Target2 (geomean)',
   'Replicate'
 )
 
@@ -51,7 +62,7 @@ process_raw_data <- function(df_in) {
   # 'CT', 'Ct Threshold', 'Target Name', 'Reporter'
   # QS7 starts at row 22 in "Results"
   # 'Cq', 'Threshold', 'Target', 'Reporter'
-  rawdata.column_titles_line <- which(df_in$Results[,1]=='Well')
+  rawdata.column_titles_line <- which(df_in$Results[, 1] == 'Well')
   rawdata.column_titles <- list(
     'QuantStudio(TM) 6 Flex System' = c(
       well = 'Well',
@@ -72,7 +83,7 @@ process_raw_data <- function(df_in) {
   )
   
   # Identify QS system from raw data "Results"
-  QS.system_name <- df_in$Results[,2][which(str_detect(t(df_in$Results[,2]), 'QuantStudio')),] %>% as.character()
+  QS.system_name <- df_in$Results[, 2][which(str_detect(t(df_in$Results[, 2]), 'QuantStudio')), ] %>% as.character()
   QS.column_titles <- rawdata.column_titles[[QS.system_name]]
   
   # Create cleaned raw data "Results" so it has proper headers and only useful data
@@ -84,7 +95,7 @@ process_raw_data <- function(df_in) {
   QS.system_name <- 'QuantStudio(TM) 6 Flex System'
   QS.column_titles <- rawdata.column_titles[[QS.system_name]]
   names(data.rawdata) <- QS.column_titles
-  data.rawdata <- data.rawdata[-which(is.na(data.rawdata$Reporter)), ]
+  data.rawdata <- data.rawdata[!is.na(data.rawdata$Reporter), ]
   data.rawdata <- pivot_wider(
     data.rawdata,
     id_cols = c(QS.column_titles[['well']], QS.column_titles[['wellpos']]),
@@ -173,7 +184,6 @@ extract_and_convert_benchling_info <- function(df_in) {
 
 # Merge Benchling dictionary with raw data and platemaps
 merge_data <- function(df_plate_metadata,
-                       df_benchling_probes,
                        df_benchling_samples = NULL,
                        df_rawdata) {
   # Merge data with benchling ---------------------------------------------------
@@ -186,28 +196,13 @@ merge_data <- function(df_plate_metadata,
                      by = 'Local_Unique_ID')
   }
   df_out <- reduce(list(df_out, df_rawdata), full_join, by = 'Well Position')
-  df_out$`FAM assay` <- apply(df_out, 1, function(r) {
-    probe_name <- as.character(r['FAM Probe'])
-    if (is.na(probe_name)) {
-      return(NA)
-    } else {
-      return(as.character(df_benchling_probes[probe_name]))
-    }
-  })
-  df_out$`VIC assay` <- apply(df_out, 1, function(r) {
-    probe_name <- as.character(r['VIC Probe'])
-    if (is.na(probe_name)) {
-      return(NA)
-    } else {
-      return(as.character(df_benchling_probes[probe_name]))
-    }
-  })
   
   return(df_out)
 }
 
 # Data Analysis
 analyze_data <- function(df_in,
+                         normalization_channel = 'CT_VIC',
                          maxCT = 30,
                          minCT = 10) {
   numeric_conversions <- c(
@@ -217,62 +212,136 @@ analyze_data <- function(df_in,
     'Replicate',
     'Well',
     'Tissue Plate Number',
-    'Normalize to Group',
-    'CT_FAM',
-    'CT_VIC',
-    'Ct Threshold_FAM',
-    'Ct Threshold_VIC'
+    'Normalize to Group'
   )
-  df_out <- df_in %>% mutate(across(numeric_conversions, as.numeric))
+  all_CT_channels <- c('CT_FAM', 'CT_VIC', 'CT_ABY')
+  all_threshold_channels <- c('Ct Threshold_FAM', 'Ct Threshold_VIC', 'Ct Threshold_ABY')
+  CT_channels <- all_CT_channels[which(all_CT_channels %in% names(df_in))]
+  threshold_channels <- all_threshold_channels[which(all_threshold_channels %in% names(df_in))]
+  df_out <- df_in %>% mutate(across(
+    c(numeric_conversions, CT_channels, threshold_channels),
+    as.numeric
+  ))
   
+  CT_failure_tolerance <- 1
   df_out$minCT <- rep(minCT, length(df_out$Group))
   df_out$maxCT <- rep(maxCT, length(df_out$Group))
   df_out$CT_flag <- apply(df_out, 1, function(r) {
-    fam <- as.numeric(r['CT_FAM'])
-    vic <- as.numeric(r['CT_VIC'])
-    if (is.na(fam) |
-        is.na(vic) |
-        !between(fam, minCT, maxCT) |
-        !between(vic, minCT, maxCT)) {
-      return(TRUE)
-    } else {
-      return(FALSE)
-    }
+    na_flag <- sum(is.na(r[CT_channels])) > CT_failure_tolerance
+    CT_value_flag <- sum(sapply(r[CT_channels], function(x) {
+      !between(as.numeric(x), minCT, maxCT)
+    })) > CT_failure_tolerance
+    return(na_flag |
+             CT_value_flag | any(is.na(c(
+               na_flag, CT_value_flag
+             ))))
   })
   
-  df_out$dCT <- apply(df_out, 1, function(r) {
+  target_channels <- CT_channels[which(CT_channels != normalization_channel)]
+  channel_key <- c('CT_FAM' = 'FAM Probe',
+                   'CT_VIC' = 'VIC Probe',
+                   'CT_ABY' = 'ABY Probe')
+  threshold_key <- c('CT_FAM' = 'Ct Threshold_FAM',
+                     'CT_VIC' = 'Ct Threshold_VIC',
+                     'CT_ABY' = 'Ct Threshold_ABY')
+  dCTs <- apply(df_out, 1, function(r) {
     if (!as.logical(r['CT_flag'])) {
-      as.numeric(r['CT_FAM']) - as.numeric(r['CT_VIC'])
+      Target1 <- r[channel_key[target_channels[1]]]
+      Target2 <- r[channel_key[target_channels[2]]]
+      Reference <- r[channel_key[normalization_channel]]
+      CT_Target1 <- as.numeric(r[target_channels[1]])
+      CT_Target2 <- as.numeric(r[target_channels[2]])
+      CT_Reference <- as.numeric(r[normalization_channel])
+      Threshold1 <- r[threshold_key[target_channels[1]]]
+      Threshold2 <- r[threshold_key[normalization_channel]]
+      ThresholdRef <- r[threshold_key[target_channels[1]]]
+      dCT_Target1 <- CT_Target1 - CT_Reference
+      dCT_Target2 <- CT_Target2 - CT_Reference
+      return(
+        c(
+          Target1,
+          Target2,
+          Reference,
+          CT_Target1,
+          CT_Target2,
+          CT_Reference,
+          Threshold1,
+          Threshold2,
+          ThresholdRef,
+          dCT_Target1,
+          dCT_Target2
+        )
+      )
     } else {
-      NA
+      return(rep(NA, 11))
     }
-  })
+  }) %>% t() %>% as_tibble()
+  names(dCTs) <- c(
+    'Target1',
+    'Target2',
+    'Reference',
+    'CT_Target1',
+    'CT_Target2',
+    'CT_Reference',
+    'Ct Threshold_Target1',
+    'Ct Threshold_Target2',
+    'Ct Threshold_Reference',
+    'dCT_Target1',
+    'dCT_Target2'
+  )
+  df_out <- bind_cols(df_out, dCTs) %>% mutate(across(
+    c(
+      'CT_Target1',
+      'CT_Target2',
+      'CT_Reference',
+      'Ct Threshold_Target1',
+      'Ct Threshold_Target2',
+      'Ct Threshold_Reference',
+      'dCT_Target1',
+      'dCT_Target2'
+    ),
+    as.numeric
+  ))
+  
   data.normalization_groups <- df_out %>%
     group_by(`Normalize to Group`) %>%
     filter(`Control Group` != 'NA', !`CT_flag`) %>%
-    summarise_at(vars(dCT), list('Control dCT' = mean))
+    summarise_at(vars(dCT_Target1, dCT_Target2), list('Control dCT' = mean))
+  names(data.normalization_groups) <- c('Normalize to Group',
+                                        'Control dCT_Target1',
+                                        'Control dCT_Target2')
   df_out <- reduce(list(df_out, data.normalization_groups), left_join, by = 'Normalize to Group')
-  df_out$ddCT <- apply(df_out, 1, function(r) {
+  ddCTs <- apply(df_out, 1, function(r) {
     if (!as.logical(r['CT_flag'])) {
-      as.numeric(r['dCT']) - as.numeric(r['Control dCT'])
+      ddCT_Target1 <- as.numeric(r['dCT_Target1']) - as.numeric(r['Control dCT_Target1'])
+      ddCT_Target2 <- as.numeric(r['dCT_Target2']) - as.numeric(r['Control dCT_Target2'])
+      mRNA_Target1 <- 100 * 2^(-1 * ddCT_Target1)
+      mRNA_Target2 <- 100 * 2^(-1 * ddCT_Target2)
+      return(c(ddCT_Target1, ddCT_Target2, mRNA_Target1, mRNA_Target2))
     } else {
-      NA
+      return(c(NA, NA, NA, NA))
     }
-  })
-  df_out$`% mRNA expression (technical replicate)` <- apply(df_out, 1, function(r) {
+  }) %>% t() %>% as_tibble()
+  names(ddCTs) <- c(
+    'ddCT_Target1',
+    'ddCT_Target2',
+    '% mRNA expression Target1 (technical replicate)',
+    '% mRNA expression Target2 (technical replicate)'
+  )
+  df_out <- bind_cols(df_out, ddCTs)
+  
+  mRNA_geomeans <- apply(df_out, 1, function(r) {
     if (!as.logical(r['CT_flag'])) {
-      100 * 2^(-1 * as.numeric(r['ddCT']))
+      geomean1 <- exp(mean(log(pull(df_out[which(df_out$Local_Unique_ID == r['Local_Unique_ID']), '% mRNA expression Target1 (technical replicate)']))))
+      geomean2 <- exp(mean(log(pull(df_out[which(df_out$Local_Unique_ID == r['Local_Unique_ID']), '% mRNA expression Target2 (technical replicate)']))))
+      return(c(geomean1, geomean2))
     } else {
-      NA
+      return(c(NA, NA))
     }
-  })
-  df_out$`% mRNA expression (geomean)` <- apply(df_out, 1, function(r) {
-    if (!as.logical(r['CT_flag'])) {
-      exp(mean(log(pull(df_out[which(df_out$Local_Unique_ID == r['Local_Unique_ID']), '% mRNA expression (technical replicate)']))))
-    } else {
-      NA
-    }
-  })
+  }) %>% t() %>% as_tibble()
+  names(mRNA_geomeans) <- c('% mRNA expression Target1 (geomean)',
+                            '% mRNA expression Target2 (geomean)')
+  df_out <- bind_cols(df_out, mRNA_geomeans)
   
   return(df_out)
 }
@@ -280,6 +349,7 @@ analyze_data <- function(df_in,
 # Create visualizations for easy viewing of data
 create_data_pivots <- function(df_in, output.plates = .output.plates) {
   output.pivot.plates <- df_in[which(names(df_in) %in% c('Well Position', output.plates))]
+  output.plates <- output.plates[which(output.plates %in% names(output.pivot.plates))]
   output.pivot.plates$Row <- str_sub_all(output.pivot.plates$`Well Position`,
                                          start = 1,
                                          end = 1)
@@ -301,8 +371,9 @@ create_data_pivots <- function(df_in, output.plates = .output.plates) {
 
 # Benchling output
 benchling_output <- function(df_in = NULL,
+                             df_benchling_probes = NULL,
                              output.benchling = .output.benchling) {
-  if (is.null(df_in)) {
+  if (is.null(df_in) | is.null(df_benchling_probes)) {
     df_out <- data.frame(Error = 'No Benchling entities supplied. Analysis performed without Benchling entitites.')
     
     return(df_out)
@@ -310,11 +381,14 @@ benchling_output <- function(df_in = NULL,
     output.benchling <- c(output.benchling, 'Normalize to Group')
     output.pivot.benchling <- df_in[-which(is.na(df_in$Entity)), which(names(df_in) %in% output.benchling)] %>% .[, output.benchling]
     output.benchling.pivot_columns <- c(
-      'CT_FAM',
-      'Ct Threshold_FAM',
-      'CT_VIC',
-      'Ct Threshold_VIC',
-      '% mRNA expression (geomean)'
+      'CT_Target1',
+      'Ct Threshold_Target1',
+      '% mRNA expression Target1 (geomean)',
+      'CT_Target2',
+      'Ct Threshold_Target2',
+      '% mRNA expression Target2 (geomean)',
+      'CT_Reference',
+      'Ct Threshold_Reference'
     )
     output.pivot.benchling <- pivot_wider(
       output.pivot.benchling,
@@ -335,13 +409,30 @@ benchling_output <- function(df_in = NULL,
       }) %>% as_tibble()
       out <- bind_cols(
         Entity = r['Entity'],
-        'FAM assay' = r['FAM assay'],
-        'VIC assay' = r['VIC assay'],
-        out.data, 
+        out.data,
         'ddCT Control Samples' = paste(normalization_entities[[as.numeric(r['Normalize to Group'])]], collapse = ',')
       )
       return(out)
     }) %>% reduce(bind_rows)
+    
+    out_probes <- apply(output.pivot.benchling, 1, function(r) {
+      ent <- as.character(r['Entity'])
+      t1 <- as.character(r['Target1'])
+      if (!is.na(t1)) {
+        t1 <- as.character(df_benchling_probes[t1])
+      }
+      t2 <- as.character(r['Target2'])
+      if (!is.na(t2)) {
+        t2 <- as.character(df_benchling_probes[t2])
+      }
+      ref <- as.character(r['Reference'])
+      if (!is.na(ref)) {
+        ref <- as.character(df_benchling_probes[ref])
+      }
+      return(c(ent, t1, t2, ref))
+    }) %>% t() %>% as_tibble()
+    names(out_probes) <- c('Entity', 'Target1 Assay', 'Target2 Assay', 'Reference Assay')
+    df_out <- reduce(list(out_probes, df_out), left_join, by = 'Entity')
     
     return(df_out)
   }
@@ -393,34 +484,32 @@ create_qPCR_Excel <- function(df_all,
 
 
 # Testing
-# datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
-# datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
-# datafile.path.rawdata <-r"(P:\Departments\Bioanalytical\1. Mouse Study Data\2024\2024-182 (049) -Platform lipid length optimization of PS3 vs PS6 lipid-modified SSB AOCs\raw data\2024.05.29 AY 049 D84 TC H_20240529_152125_20240529 160507.xls)"
-# datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
-# 
+datafile.path.platemap <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\D28 platemaps.xlsx)"
+datafile.path.rawdata <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\2024-04-05 AY 049 D28 KD.xlsx)"
+datafile.path.Benchling <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R\cDNA D28 Benchling.csv)"
+
 # datafile.path.platemap <- r"(C:\Users\ayu\Downloads\platemaps_template_blank.xlsx)"
 # datafile.path.rawdata <- r"(C:\Users\ayu\Downloads\2025-05-21 Study 2025-955 Dmpk_P2_REF.xlsx)"
-# 
-# input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
-# input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
-# input.Benchling <- read.csv(datafile.path.Benchling)
+
+input.platemap <- excel_sheets(datafile.path.platemap) %>% set_names() %>% map(read_excel, path = datafile.path.platemap)
+input.rawdata <- excel_sheets(datafile.path.rawdata) %>% set_names() %>% map(read_excel, path = datafile.path.rawdata)
+input.Benchling <- read.csv(datafile.path.Benchling)
 
 # Get data from dfs
-# df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
-# df_rawdata <- process_raw_data(input.rawdata)
-# df_info <- extract_platemaps_and_study_info(input.platemap)
-# df_plate_metadata <- df_info[['plate_metadata']]
-# df_benchling_probes <- df_info[['probes']]
+df_benchling_samples <- extract_and_convert_benchling_info(input.Benchling)
+df_rawdata <- process_raw_data(input.rawdata)
+df_info <- extract_platemaps_and_study_info(input.platemap)
+df_plate_metadata <- df_info[['plate_metadata']]
+df_benchling_probes <- df_info[['probes']]
 
 # Do stuff here
-# df_out_all <- merge_data(
-#   df_plate_metadata = df_plate_metadata,
-#   df_benchling_samples = df_benchling_samples,
-#   df_benchling_probes = df_benchling_probes,
-#   df_rawdata = df_rawdata
-# ) %>% analyze_data()
-# df_out_plates <- create_data_pivots(df_out_all)
-# df_out_benchling <- benchling_output(df_out_all)
+df_out_all <- merge_data(
+  df_plate_metadata = df_plate_metadata,
+  df_benchling_samples = df_benchling_samples,
+  df_rawdata = df_rawdata
+) %>% analyze_data()
+df_out_plates <- create_data_pivots(df_out_all)
+df_out_benchling <- benchling_output(df_out_all, df_benchling_probes = df_benchling_probes)
 
 # # Excel
 # folderpath <- r"(C:\Users\ayu\OneDrive - Avidity Biosciences\Documents\Data\qPCR KD examples\2024-182 KD resources for automated in R)" %>% tools::file_path_as_absolute()
